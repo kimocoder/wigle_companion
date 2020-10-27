@@ -141,11 +141,51 @@ class WiFiScanner():
                 if res:
                     handler(line, res, networks)
 
-        # Filtering non-WPS networks
-        networks = list(filter(lambda x: bool(x['WPS']), networks))
         if not networks:
             return False
         return networks
+
+
+def handle_network(network: dict) -> bool:
+    key_labels = {
+        "BSSID": "bssid",
+        "ESSID": "essid",
+        "Security type": "security",
+        "WPS": "wps_version",
+        "WPS state": "wps_state",
+        "WPS locked": "wps_locked",
+        "Response type": "response_type",
+        "UUID": "uuid",
+        "Manufacturer": "manufacturer",
+        "Model": "model",
+        "Model number": "model_number",
+        "Serial number": "serial_number",
+        "Primary device type": "primary_device_type",
+        "Device name": "device_name",
+        "Config methods": "config_methods"
+    }
+
+    if not network['BSSID'] or\
+        not any((network['Manufacturer'], network['Model'], network['Model number'],
+                network['Serial number'], network['Device name'])):
+        return False
+
+    matching_fields = dict(filter(lambda x: (x[0] in key_labels) and bool(x[1]), network.items()))
+    keys = []
+    values = []
+    for key, value in matching_fields.items():
+        keys.append(key_labels[key])
+        if key == "Config methods":
+            value = ", ".join(value)
+        values.append(value)
+
+    query_string = "INSERT INTO network ({}) VALUES ({}) ON CONFLICT(bssid) DO UPDATE SET {};".format(
+            ','.join(keys),
+            ','.join('?' * len(keys)),
+            ','.join(f'{k}=?' for k in keys)
+        )
+    conn.execute(query_string, values * 2)
+    return True
 
 
 if __name__ == '__main__':
@@ -155,36 +195,37 @@ if __name__ == '__main__':
     import atexit
 
     parser = argparse.ArgumentParser(
-        description='Ассистент мобильного приложения WiGLE (Android).'
-        'Использует iw для сканирования Wi-Fi сетей и получения информации о производителе, модели и пр. (WSC) и записывает информацию в локальную БД (SQLite)',
-        epilog='Пример использования: %(prog)s -i wlan0 -d 3')
+        description='WiGLE Wardriving application assistant (Android).'
+        'This program uses iw for scanning Wi-Fi networks and obtaining info about '
+        'vendor, model, serial number etc. (WSC) and writes it to the local database (SQLite)',
+        epilog='Example: %(prog)s -i wlan0 -d 3')
 
     parser.add_argument(
         '-i', '--interface',
         type=str,
         required=True,
-        help='Имя беспроводного интерфейса для сканирования'
+        help='Name of the wireless interface for scanning'
         )
     parser.add_argument(
         '-m', '--mode',
         type=str,
         choices=['real', 'dump'],
         default='dump',
-        help='Метод сканирования: real — настоящее сканирование,\
-        dump — использование результатов предыдущих сканирований.\
-        По умолчанию: %(default)s'
+        help='Network scan mode: real — real scanning (requires superuser access), '
+        'dump — dumping the results of previous scans (no root required, if SELinux is permissive). '
+        'Default: %(default)s'
         )
     parser.add_argument(
         '-d', '--delay',
         type=float,
         default=1.5,
-        help='Задержка между сканированием. По умолчанию: %(default)s'
+        help='Delay between scans (in seconds). Default: %(default)s'
         )
     parser.add_argument(
         '-f', '--db-file',
         type=str,
         default='networks.db',
-        help='База данных SQLite для сохранения результатов. По умолчанию: %(default)s'
+        help='SQLite database for saving results. Default: %(default)s'
         )
 
     args = parser.parse_args()
@@ -202,7 +243,7 @@ if __name__ == '__main__':
     "security"  TEXT,
     "wps_version"   TEXT,
     "wps_state" INTEGER,
-    "wps_locked"    INTEGER,
+    "wps_locked"    INTEGER DEFAULT 0,
     "response_type" INTEGER,
     "uuid"  TEXT,
     "manufacturer"  TEXT,
@@ -217,25 +258,29 @@ if __name__ == '__main__':
 
     scanner = WiFiScanner(args.interface)
 
-    while True:
-        if args.mode == 'real':
-            results = scanner.scan()
-        else:
-            results = scanner.scan(dump_only=True)
-        if not results:
-            continue
+    try:
+        while True:
+            if args.mode == 'real':
+                results = scanner.scan()
+            else:
+                results = scanner.scan(dump_only=True)
+            if not results:
+                print('[-] No results — rescanning')
+                continue
+            else:
+                cnt = len(results)
+                # Filtering non-WPS networks
+                results = list(filter(lambda x: bool(x['WPS']), results))
+                wps_cnt = len(results)
+                print(f'[+] Found {cnt} networks, {wps_cnt} with WPS', end='')
 
-        for network in results:
-            if network['WPS'] and network['Model'] and network['Manufacturer']:
-                conn.execute(
-                    'INSERT OR IGNORE INTO network \
-                    (bssid, essid, security, wps_version, wps_state, wps_locked, response_type, uuid, manufacturer, model, model_number, serial_number, primary_device_type, device_name, config_methods)\
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    (
-                        network['BSSID'], network['ESSID'], network['Security type'], network['WPS'], network['WPS state'], network['WPS locked'],
-                        network['Response type'], network['UUID'], network['Manufacturer'], network['Model'], network['Model number'],
-                        network['Serial number'], network['Primary device type'], network['Device name'], ', '.join(network['Config methods']))
-                )
-                conn.commit()
+            c = 0   # Number of networks added to the database
+            for network in results:
+                if handle_network(network):
+                    c += 1
+            conn.commit()
+            print(f', {c} added to the DB')
 
-        time.sleep(args.delay)
+            time.sleep(args.delay)
+    except KeyboardInterrupt:
+        print('\nAborting…')
