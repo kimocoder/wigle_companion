@@ -170,7 +170,7 @@ def handle_network(network: dict) -> bool:
                 network['Serial number'], network['Device name'])):
         return False
 
-    matching_fields = dict(filter(lambda x: (x[0] in key_labels) and x[1] != '', network.items()))
+    matching_fields = dict(filter(lambda x: (x[0] in key_labels) and (x[1] != ''), network.items()))
     keys = []
     values = []
     for key, value in matching_fields.items():
