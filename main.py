@@ -146,7 +146,7 @@ class WiFiScanner():
         return networks
 
 
-def handle_network(network: dict) -> bool:
+def handle_network(network: dict) -> int:
     key_labels = {
         "BSSID": "bssid",
         "ESSID": "essid",
@@ -168,7 +168,7 @@ def handle_network(network: dict) -> bool:
     if not network['BSSID'] or\
         not any((network['Manufacturer'], network['Model'], network['Model number'],
                 network['Serial number'], network['Device name'])):
-        return False
+        return 0
 
     matching_fields = dict(filter(lambda x: (x[0] in key_labels) and (x[1] != ''), network.items()))
     keys = []
@@ -184,8 +184,8 @@ def handle_network(network: dict) -> bool:
             ','.join('?' * len(keys)),
             ','.join(f'{k}=?' for k in keys)
         )
-    conn.execute(query_string, values * 2)
-    return True
+    r = conn.execute(query_string, values * 2)
+    return r.rowcount
 
 
 if __name__ == '__main__':
@@ -276,10 +276,11 @@ if __name__ == '__main__':
 
             c = 0   # Number of networks added to the database
             for network in results:
-                if handle_network(network):
-                    c += 1
+                rows_affected = handle_network(network)
+                if rows_affected:
+                    c += rows_affected
             conn.commit()
-            print(f', {c} added to the DB')
+            print(f', {c} rows affected')
 
             time.sleep(args.delay)
     except KeyboardInterrupt:
