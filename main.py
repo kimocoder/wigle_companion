@@ -127,7 +127,7 @@ class WiFiScanner():
         if dump_only:
             cmd += ' dump'
         proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT, encoding='utf-8')
+                              stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
         lines = proc.stdout.splitlines()
         networks = []
 
