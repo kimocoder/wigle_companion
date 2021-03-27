@@ -227,6 +227,11 @@ if __name__ == '__main__':
         default='networks.db',
         help='SQLite database for saving results. Default: %(default)s'
         )
+    parser.add_argument(
+        '-q', '--quiet',
+        action='store_true',
+        help='Print less text to stdout'
+    )
 
     args = parser.parse_args()
     conn = sqlite3.connect(args.db_file)
@@ -257,6 +262,7 @@ if __name__ == '__main__':
 );''')
 
     scanner = WiFiScanner(args.interface)
+    prev_empty = False
 
     try:
         while True:
@@ -265,14 +271,25 @@ if __name__ == '__main__':
             else:
                 results = scanner.scan(dump_only=True)
             if not results:
-                print('[-] No results — rescanning')
+                if args.quiet:
+                    if prev_empty == True:
+                        print('.', end='', flush=True)
+                    else:
+                        print('[-] No results — rescanning', end='', flush=True)
+                else:
+                    print('[-] No results — rescanning')
+
+                prev_empty = True
                 continue
             else:
+                if prev_empty == True:
+                    print('')
                 cnt = len(results)
                 # Filtering non-WPS networks
                 results = list(filter(lambda x: bool(x['WPS']), results))
                 wps_cnt = len(results)
                 print(f'[+] Found {cnt} networks, {wps_cnt} with WPS', end='')
+                prev_empty = False
 
             c = 0   # Number of networks added to the database
             for network in results:
