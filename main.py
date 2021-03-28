@@ -230,7 +230,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-q', '--quiet',
         action='store_true',
-        help='Print less text to stdout'
+        help='Print less information to stdout'
     )
 
     args = parser.parse_args()

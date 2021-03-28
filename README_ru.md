@@ -43,6 +43,7 @@ optional arguments:
                         Delay between scans (in seconds). Default: 1.5
   -f DB_FILE, --db-file DB_FILE
                         SQLite database for saving results. Default: networks.db
+  -q, --quiet           Print less information to stdout
 
 Example: main.py -i wlan0 -d 3
 
