@@ -41,10 +41,7 @@ class WiFiScanner():
         def handle_securityType(line, result, networks):
             sec = networks[-1]['Security type']
             if result.group(1) == 'capability':
-                if 'Privacy' in result.group(2):
-                    sec = 'WEP'
-                else:
-                    sec = 'Open'
+                sec = 'WEP' if 'Privacy' in result.group(2) else 'Open'
             elif sec == 'WEP':
                 if result.group(1) == 'RSN':
                     sec = 'WPA2'
@@ -141,9 +138,7 @@ class WiFiScanner():
                 if res:
                     handler(line, res, networks)
 
-        if not networks:
-            return False
-        return networks
+        return networks if networks else False
 
 
 def handle_network(network: dict) -> int:
@@ -179,11 +174,7 @@ def handle_network(network: dict) -> int:
             value = ", ".join(value)
         values.append(value)
 
-    query_string = "INSERT INTO network ({}) VALUES ({}) ON CONFLICT(bssid) DO UPDATE SET {};".format(
-            ','.join(keys),
-            ','.join('?' * len(keys)),
-            ','.join(f'{k}=?' for k in keys)
-        )
+    query_string = f"INSERT INTO network ({','.join(keys)}) VALUES ({','.join('?' * len(keys))}) ON CONFLICT(bssid) DO UPDATE SET {','.join(f'{k}=?' for k in keys)};"
     r = conn.execute(query_string, values * 2)
     return r.rowcount
 
